@@ -1,6 +1,6 @@
 # Story Weaver
 
-LLM 驱动的多 NPC 交互叙事后端 MVP。设计师目标被编译为不可越界的章节骨架，LLM 在每回合生成 NPC 行为和剧情细节。
+LLM 驱动的多 NPC 交互叙事。初始目标被编译为章节骨架，LLM 在每回合生成 NPC 行为和剧情细节。
 
 ## Architecture
 
@@ -11,46 +11,6 @@ LLM 驱动的多 NPC 交互叙事后端 MVP。设计师目标被编译为不可�
 - Model layer: 默认 `mock` 可离线运行；配置为 `openai` 后使用 LangChain structured output。
 
 当前版本采用每局固定 NPC 节点、每回合动态路由。动态增删边、向量检索和生产级并发存储留作后续扩展。
-
-## Run
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-uvicorn story_weaver.api:app --reload
-```
-
-打开 `http://127.0.0.1:8000/` 直接游玩，或打开 `http://127.0.0.1:8000/docs` 使用 Swagger 调试 API。
-
-接真实模型：
-
-```bash
-pip install -e '.[dev,openai]'
-export STORY_MODEL_PROVIDER=openai
-export STORY_MODEL_NAME=gpt-4o-mini
-export OPENAI_API_KEY=your-key
-uvicorn story_weaver.api:app --reload
-```
-
-也可以在项目根目录创建 `.env`：
-
-```dotenv
-STORY_MODEL_PROVIDER=openai
-STORY_MODEL_NAME=gpt-4o-mini
-OPENAI_API_KEY=your-key
-```
-
-不要将 `.env` 或 API Key 提交到版本库。网页顶部会显示当前使用的是本地演示模型还是真实模型。
-
-接阿里云百炼千问：
-
-```dotenv
-STORY_MODEL_PROVIDER=qwen
-STORY_MODEL_NAME=qwen-turbo
-DASHSCOPE_API_KEY=your-key
-STORY_QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-```
 
 ## User Journey
 

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Story Weaver</title>
+  <style>
+    :root { color-scheme: dark; --ink:#ede5d4; --muted:#a79d8b; --panel:#171713; --line:#3b392f; --gold:#d4a84f; }
+    * { box-sizing: border-box; }
+    [hidden] { display:none !important; }
+    body { margin:0; min-height:100vh; color:var(--ink); background:#0d0e0c; font:16px/1.6 Georgia,"Noto Serif SC",serif; }
+    body::before { content:""; position:fixed; inset:0; pointer-events:none; background:radial-gradient(circle at 75% 10%,#38301b66,transparent 34%),linear-gradient(115deg,#101511,#090a09); }
+    main { position:relative; width:min(980px,calc(100% - 32px)); margin:0 auto; padding:52px 0 80px; }
+    header { border-bottom:1px solid var(--line); margin-bottom:30px; }
+    .eyebrow { color:var(--gold); text-transform:uppercase; letter-spacing:.22em; font:12px Arial,sans-serif; }
+    h1 { margin:8px 0 12px; font-size:clamp(38px,8vw,76px); line-height:1; font-weight:400; }
+    h2,h3,p { margin-top:0; }
+    .subtitle { color:var(--muted); max-width:680px; }
+    .panel { background:color-mix(in srgb,var(--panel) 92%,transparent); border:1px solid var(--line); padding:24px; box-shadow:0 24px 80px #0007; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    label { display:block; margin-bottom:6px; color:var(--muted); font:13px Arial,sans-serif; }
+    input,textarea,select { width:100%; border:1px solid var(--line); background:#0d0e0c; color:var(--ink); padding:12px; font:inherit; outline:none; }
+    textarea { min-height:90px; resize:vertical; }
+    input:focus,textarea:focus { border-color:var(--gold); }
+    button { border:1px solid var(--gold); background:var(--gold); color:#17130b; padding:11px 20px; font:bold 14px Arial,sans-serif; cursor:pointer; }
+    button.secondary { background:transparent; color:var(--gold); }
+    button:disabled { opacity:.45; cursor:wait; }
+    .actions { display:flex; align-items:center; gap:12px; margin-top:20px; }
+    .status { color:var(--muted); font:13px Arial,sans-serif; }
+    #game { display:none; }
+    .game-head { display:flex; justify-content:space-between; align-items:start; gap:20px; }
+    .chapter { color:var(--gold); font:13px Arial,sans-serif; }
+    .npcs { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0 24px; }
+    .npc { padding:6px 10px; border:1px solid var(--line); color:var(--muted); font:12px Arial,sans-serif; }
+    #log { display:flex; flex-direction:column; gap:14px; max-height:52vh; overflow:auto; padding-right:6px; }
+    .entry { border-left:2px solid var(--line); padding:4px 0 4px 14px; white-space:pre-wrap; }
+    .entry.player { border-color:var(--gold); }
+    .speaker { display:block; color:var(--gold); margin-bottom:3px; font:12px Arial,sans-serif; text-transform:uppercase; letter-spacing:.08em; }
+    .composer { display:grid; grid-template-columns:1fr auto; gap:10px; margin-top:22px; }
+    .composer input { min-width:0; }
+    .error { color:#e9937e; }
+    @media (max-width:650px) { main{padding-top:28px}.grid{grid-template-columns:1fr}.game-head{display:block}.composer{grid-template-columns:1fr}.composer button{width:100%} }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Multi-agent narrative prototype</div>
+    <h1>Story Weaver</h1>
+    <p class="subtitle">给出一个世界设定。系统生成受控剧情骨架与 NPC 群体，你只需要描述下一步想做什么。</p>
+  </header>
+
+  <section id="setup" class="panel">
+    <h2>创建你的故事</h2>
+    <div class="grid">
+      <div>
+        <label for="scene">想进入什么场景？</label>
+        <textarea id="scene">我想玩一个魔法学院探险游戏，学院深处藏着被封印的古老秘密</textarea>
+      </div>
+      <div>
+        <label for="goal">最终闯关目标</label>
+        <textarea id="goal">通过三重试炼并找到魔法石</textarea>
+      </div>
+      <div>
+        <label for="tone">故事氛围</label>
+        <input id="tone" value="神秘、温暖、有危险感">
+      </div>
+      <div>
+        <label for="npcCount">NPC 数量</label>
+        <select id="npcCount"><option>3</option><option selected>4</option><option>5</option><option>6</option></select>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="createButton">生成世界</button>
+      <span id="setupStatus" class="status"></span>
+    </div>
+  </section>
+
+  <section id="game" class="panel">
+    <div class="game-head">
+      <div><div id="chapter" class="chapter"></div><h2 id="title"></h2><p id="objective" class="subtitle"></p></div>
+      <button id="newButton" class="secondary">新故事</button>
+    </div>
+    <div id="npcs" class="npcs"></div>
+    <div id="log"></div>
+    <div id="startArea" class="actions"><button id="startButton">进入故事</button><span class="status">NPC 将自动展开开场</span></div>
+    <form id="composer" class="composer" hidden>
+      <input id="action" autocomplete="off" placeholder="例如：我走近守门人，询问符文钥匙的下落">
+      <button id="sendButton" type="submit">采取行动</button>
+    </form>
+    <div id="gameStatus" class="status"></div>
+  </section>
+</main>
+<script>
+  let gameId = null;
+  const $ = (id) => document.getElementById(id);
+
+  function setBusy(button, busy, text) {
+    button.disabled = busy;
+    if (text) button.textContent = busy ? text : button.dataset.normal;
+  }
+
+  async function api(path, options = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+    try {
+      const response = await fetch(path, { headers:{"Content-Type":"application/json"}, signal:controller.signal, ...options });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "请求失败");
+      return data;
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("模型响应超过 60 秒，请重试");
+      throw error;
+    } finally { clearTimeout(timeout); }
+  }
+
+  function text(tag, className, content) {
+    const node = document.createElement(tag);
+    node.className = className;
+    node.textContent = content;
+    return node;
+  }
+
+  function addEntry(speaker, content, kind = "npc") {
+    const entry = text("div", `entry ${kind}`, content);
+    entry.prepend(text("span", "speaker", speaker));
+    $("log").append(entry);
+    entry.scrollIntoView({behavior:"smooth", block:"nearest"});
+  }
+
+  function showWorld(game) {
+    gameId = game.game_id;
+    $("setup").style.display = "none";
+    $("game").style.display = "block";
+    $("title").textContent = game.world.title;
+    $("chapter").textContent = `准备阶段 · ${game.current_chapter.title}`;
+    $("objective").textContent = game.world.premise + "\n目标：" + game.world.final_goal;
+    $("npcs").replaceChildren(...game.active_npcs.map(n => text("span", "npc", `${n.name} · ${n.role}`)));
+    $("log").replaceChildren();
+    addEntry("系统", "世界已经生成。准备好后进入故事。", "system");
+  }
+
+  function renderTurn(turn, playerAction) {
+    if (playerAction) addEntry("你", playerAction, "player");
+    $("chapter").textContent = `第 ${turn.turn} 回合 · ${turn.chapter.title}`;
+    $("objective").textContent = `当前目标：${turn.chapter.objective}`;
+    turn.replies.forEach(reply => addEntry(reply.npc_name, `${reply.action}\n${reply.speech}`));
+    if (turn.status === "completed") {
+      addEntry("结局", turn.ending || "故事结束", "system");
+      $("composer").hidden = true;
+      $("gameStatus").textContent = "你已完成这次冒险。";
+    }
+  }
+
+  $("createButton").dataset.normal = "生成世界";
+  $("createButton").addEventListener("click", async () => {
+    const button = $("createButton");
+    setBusy(button, true, "正在生成…");
+    $("setupStatus").textContent = "LLM 正在完善章节与人物设定";
+    try {
+      const game = await api("/games", {method:"POST", body:JSON.stringify({
+        scene:$("scene").value, final_goal:$("goal").value, tone:$("tone").value,
+        npc_count:Number($("npcCount").value), chapter_count:3
+      })});
+      showWorld(game);
+    } catch (error) {
+      $("setupStatus").textContent = error.message;
+      $("setupStatus").classList.add("error");
+    } finally { setBusy(button, false); }
+  });
+
+  $("startButton").dataset.normal = "进入故事";
+  $("startButton").addEventListener("click", async () => {
+    const button = $("startButton");
+    setBusy(button, true, "开场中…");
+    try {
+      const turn = await api(`/games/${gameId}/start`, {method:"POST"});
+      renderTurn(turn);
+      $("startArea").hidden = true;
+      $("composer").hidden = false;
+      $("action").focus();
+    } catch (error) { $("gameStatus").textContent = error.message; }
+    finally { setBusy(button, false); }
+  });
+
+  $("composer").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const action = $("action").value.trim();
+    if (!action) return;
+    const button = $("sendButton");
+    button.dataset.normal = "采取行动";
+    setBusy(button, true, "NPC 思考中…");
+    $("action").disabled = true;
+    let seconds = 0;
+    $("gameStatus").textContent = "导演正在调度 NPC…";
+    const timer = setInterval(() => {
+      seconds += 1;
+      $("gameStatus").textContent = `NPC 正在并行生成… ${seconds} 秒`;
+    }, 1000);
+    try {
+      const turn = await api(`/games/${gameId}/turns`, {method:"POST", body:JSON.stringify({action})});
+      renderTurn(turn, action);
+      $("action").value = "";
+      if (turn.status !== "completed") $("gameStatus").textContent = "";
+    } catch (error) { $("gameStatus").textContent = error.message; }
+    finally { clearInterval(timer); setBusy(button, false); $("action").disabled = false; $("action").focus(); }
+  });
+
+  $("newButton").addEventListener("click", () => location.reload());
+</script>
+</body>
+</html>

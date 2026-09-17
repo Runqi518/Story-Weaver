@@ -10,6 +10,7 @@ from story_weaver.models import (
     GameStatus,
     GameView,
     MemoryEvent,
+    NPCReply,
     PlayerTurnRequest,
     TurnResponse,
 )
@@ -58,18 +59,38 @@ class GameService:
         self._remember(state, "player", request.action, actor_id="player", important=True)
 
         app = self.graph.compile_for(state)
-        result = app.invoke(
-            {
-                "game": state,
-                "player_action": request.action,
-                "replies": [],
-                "decision": None,
-                "messages": [],
-            },
-            config={"configurable": {"thread_id": f"{game_id}:{state.turn}"}},
-        )
-        state = result["game"]
+        try:
+            result = app.invoke(
+                {
+                    "game": state,
+                    "player_action": request.action,
+                    "replies": [],
+                    "decision": None,
+                    "messages": [],
+                },
+                config={"configurable": {"thread_id": f"{game_id}:{state.turn}"}},
+            )
+        except Exception:
+            result = {"game": state, "replies": [], "decision": None}
+        state = result.get("game", state)
         replies = result["replies"]
+        # 最终保险：任何原因导致空回合时，强制让第一个活跃 NPC 直接回应玩家。
+        if not replies and state.active_npc_ids:
+            fallback_npc = next(
+                npc for npc in state.world.npcs if npc.id == state.active_npc_ids[0]
+            )
+            generated = self.model.play_npc(state, fallback_npc, request.action, [])
+            replies = [
+                NPCReply(
+                    npc_id=fallback_npc.id,
+                    npc_name=fallback_npc.name,
+                    speech=generated.speech,
+                    action=generated.action,
+                    emotion=generated.emotion,
+                    revealed_fact=generated.revealed_fact,
+                    relationship_delta=generated.relationship_delta,
+                )
+            ]
         for reply in replies:
             npc = next(npc for npc in state.world.npcs if npc.id == reply.npc_id)
             npc.relationship_to_player = max(

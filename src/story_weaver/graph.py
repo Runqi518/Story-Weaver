@@ -60,21 +60,32 @@ class NarrativeGraph:
         def run(graph_state: TurnGraphState) -> dict:
             game = graph_state["game"]
             npc = next(npc for npc in game.world.npcs if npc.id == npc_id)
-            generated = self.model.play_npc(
-                game,
-                npc,
-                graph_state["player_action"],
-                graph_state["replies"],
-            )
-            reply = NPCReply(
-                npc_id=npc.id,
-                npc_name=npc.name,
-                speech=generated.speech,
-                action=generated.action,
-                emotion=generated.emotion,
-                revealed_fact=generated.revealed_fact,
-                relationship_delta=generated.relationship_delta,
-            )
+            try:
+                generated = self.model.play_npc(
+                    game,
+                    npc,
+                    graph_state["player_action"],
+                    graph_state["replies"],
+                )
+                reply = NPCReply(
+                    npc_id=npc.id,
+                    npc_name=npc.name,
+                    speech=generated.speech,
+                    action=generated.action,
+                    emotion=generated.emotion,
+                    revealed_fact=generated.revealed_fact,
+                    relationship_delta=generated.relationship_delta,
+                )
+            except Exception:
+                reply = NPCReply(
+                    npc_id=npc.id,
+                    npc_name=npc.name,
+                    speech="……",
+                    action=f"{npc.name} 沉默了片刻，似乎在权衡该说什么。",
+                    emotion="guarded",
+                    revealed_fact=None,
+                    relationship_delta=0,
+                )
             return {"replies": [reply]}
 
         return run

@@ -279,8 +279,11 @@ class LangChainNarrativeModel(NarrativeModel):
         decision.speaker_ids = list(
             dict.fromkeys(npc_id for npc_id in decision.speaker_ids if npc_id in active_ids)
         )[:max_replies]
-        if not decision.speaker_ids and not decision.should_end_turn:
+        # 玩家每次行动后至少要有一个 NPC 回应，禁止空回合。
+        if not decision.speaker_ids and state.active_npc_ids:
             decision.speaker_ids = state.active_npc_ids[:1]
+        if decision.speaker_ids:
+            decision.should_end_turn = False
         return decision
 
     def play_npc(
